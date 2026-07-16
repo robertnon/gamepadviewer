@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stick Trajectories — OBS Overlay</title>
+<!--
+  STICK TRAJECTORIES — OBS OVERLAY
+  =================================
+  A self-contained (no external assets, no CDN) browser-source overlay that
+  draws a fading comet-trail of your controller's analog stick movement,
+  instead of just a static dot like most gamepad viewers.
+
+  QUICK START (OBS Studio):
+  1. Open this file directly in a normal browser tab first — you'll see the
+     live preview + settings panel. Dial in the look you want.
+  2. Click "Copy OBS URL". It bakes your settings into the URL and sets
+     controls=0 (hides the settings panel for the clean overlay-only view).
+  3. In OBS: Sources → + → Browser Source.
+       - Uncheck "Local file", paste the copied URL into the URL field.
+         (A file:// URL works fine here too — you don't need to host it
+         anywhere.)
+       - Width/Height: try 900x420 for both sticks, 420x420 for one stick.
+       - Check "Transparent background" is implicit — this page paints no
+         background, so OBS will composite it with alpha automatically.
+  4. If the overlay shows "no controller detected" once added to OBS: right
+     click the source → Interact → press a button on your controller once.
+     Browsers only expose the Gamepad API after an input has been seen.
+-->
+<style>
+  :root{
+    --bg: #090c12;
+    --panel-bg: rgba(14, 18, 28, 0.82);
+    --panel-border: rgba(255,255,255,0.08);
+    --text: #e7ecf6;
+    --text-dim: #8992a3;
+    --accent-default: #5ec8ff;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html, body{
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: var(--sans);
+    color: var(--text);
+  }
+  /* Only used in local preview (controls=1) so the transparent canvas is
+     legible while you're configuring it. Never present in embed mode. */
+  body.preview-dark{ background: var(--bg); }
+  body.preview-checker{
+    background-image:
+      linear-gradient(45deg, #1a1e28 25%, transparent 25%),
+      linear-gradient(-45deg, #1a1e28 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #1a1e28 75%),
+      linear-gradient(-45deg, transparent 75%, #1a1e28 75%);
+    background-size: 24px 24px;
+    background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    background-color: #101319;
+  }
+
+  canvas#stage{
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ---------- floating chrome (only in controls=1 / preview mode) ---------- */
+  #hud{
+    position: fixed;
+    top: 18px;
+    left: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  #hud .title{
+    font-weight: 650;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+  }
+  #hud .status{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+  }
+  #hud .dot{
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #ff5d5d;
+    box-shadow: 0 0 6px #ff5d5d;
+    flex: none;
+  }
+  #hud .status.connected .dot{
+    background: #57e79b;
+    box-shadow: 0 0 6px #57e79b;
+  }
+
+  #panel{
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    bottom: 18px;
+    width: 340px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 18px;
+    overflow-y: auto;
+    z-index: 5;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  }
+  #panel h1{
+    font-size: 15px;
+    margin: 0 0 2px;
+    font-weight: 650;
+  }
+  #panel .sub{
+    font-size: 12px;
+    color: var(--text-dim);
+    margin: 0 0 18px;
+    line-height: 1.5;
+  }
+  .field{ margin-bottom: 16px; }
+  .field label{
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field label .val{
+    font-family: var(--mono);
+    color: var(--text);
+    font-size: 11.5px;
+  }
+  select, input[type="range"], input[type="color"], input[type="text"]{
+    width: 100%;
+    accent-color: var(--accent-default);
+  }
+  select{
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 7px 8px;
+    font-size: 13px;
+    font-family: var(--sans);
+  }
+  input[type="color"]{
+    -webkit-appearance: none;
+    appearance: none;
+    height: 30px;
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 2px;
+    background: rgba(255,255,255,0.06);
+    cursor: pointer;
+  }
+  input[type="color"]::-webkit-color-swatch{ border: none; border-radius: 6px; }
+  .row-check{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    padding: 8px 0;
+    border-top: 1px solid var(--panel-border);
+  }
+  .row-check:first-of-type{ border-top: none; }
+  .switch{
+    position: relative;
+    width: 34px; height: 20px;
+    flex: none;
+  }
+  .switch input{ opacity:0; width:0; height:0; }
+  .switch .track{
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.14);
+    border-radius: 999px;
+    transition: background .15s;
+  }
+  .switch .knob{
+    position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff;
+    transition: transform .15s;
+  }
+  .switch input:checked + .track{ background: var(--accent-default); }
+  .switch input:checked + .track .knob{ transform: translateX(14px); }
+
+  hr.sep{
+    border: none;
+    border-top: 1px solid var(--panel-border);
+    margin: 18px 0;
+  }
+
+  .urlbox{
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .urlbox input{
+    font-family: var(--mono);
+    font-size: 11px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  button{
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: var(--accent-default);
+    color: #06121c;
+    flex: none;
+    transition: opacity .15s, transform .1s;
+  }
+  button:hover{ opacity: 0.88; }
+  button:active{ transform: scale(0.97); }
+  button.ghost{
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    width: 100%;
+  }
+  .hint{
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  .hint b{ color: var(--text); font-weight: 600; }
+  .hint code{
+    font-family: var(--mono);
+    background: rgba(255,255,255,0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10.5px;
+  }
+  #copied-msg{
+    font-size: 11px;
+    color: #57e79b;
+    height: 14px;
+    margin: -4px 0 8px;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  #copied-msg.show{ opacity: 1; }
+
+  /* Body-level toggle for panel/hud visibility handled via JS by adding
+     the .embed class, which hides all chrome outright. */
+  body.embed #panel, body.embed #hud{ display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<div id="hud">
+  <span class="title">Stick Trajectories</span>
+  <span class="status" id="status"><span class="dot"></span><span id="status-text">No controller</span></span>
+</div>
+
+<div id="panel">
+  <h1>Overlay settings</h1>
+  <p class="sub">Configure the look, then copy the URL into an OBS Browser Source. This panel itself never appears on stream.</p>
+
+  <div class="field">
+    <label>Sticks<span class="val" id="val-mode"></span></label>
+    <select id="mode">
+      <option value="both">Both (L + R)</option>
+      <option value="l">Left only</option>
+      <option value="r">Right only</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Trail length<span class="val" id="val-trail"></span></label>
+    <input type="range" id="trail" min="150" max="2500" step="50">
+  </div>
+
+  <div class="field">
+    <label>Circle size<span class="val" id="val-size"></span></label>
+    <input type="range" id="size" min="90" max="320" step="5">
+  </div>
+
+  <div class="field">
+    <label>Trail color</label>
+    <input type="color" id="color">
+  </div>
+
+  <div class="field">
+    <label>Circle background</label>
+    <input type="color" id="bgcolor">
+  </div>
+
+  <div class="field">
+    <label>Background opacity<span class="val" id="val-bgopacity"></span></label>
+    <input type="range" id="bgopacity" min="0" max="100" step="5">
+  </div>
+
+  <div class="row-check">
+    <span>Glow</span>
+    <label class="switch"><input type="checkbox" id="glow"><span class="track"><span class="knob"></span></span></label>
+  </div>
+  <div class="row-check">
+    <span>Show L / R labels</span>
+    <label class="switch"><input type="checkbox" id="labels"><span class="track"><span class="knob"></span></span></label>
+  </div>
+  <div class="row-check">
+    <span>Dark preview background</span>
+    <label class="switch"><input type="checkbox" id="darkbg"><span class="track"><span class="knob"></span></span></label>
+  </div>
+
+  <hr class="sep">
+
+  <label style="font-size:12px; color:var(--text-dim); display:block; margin-bottom:6px;">OBS URL (paste into Browser Source)</label>
+  <div class="urlbox">
+    <input type="text" id="obsurl" readonly>
+    <button id="copybtn">Copy</button>
+  </div>
+  <div id="copied-msg">Copied ✓</div>
+
+  <p class="hint">
+    <b>Setup:</b> Sources → + → Browser Source → paste the URL above (a <code>file://</code> path works too). Suggested size: <code>900×420</code> for both sticks, <code>420×420</code> for one.<br><br>
+    <b>No controller detected in OBS?</b> Right-click the source → <b>Interact</b>, then press any button on the controller once — Chromium only reveals gamepads after an input is seen.
+  </p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // State: seeded from URL params, mutated live by the settings panel.
+  // ---------------------------------------------------------------------
+  const qp = new URLSearchParams(location.search);
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  const state = {
+    mode: ['both','l','r'].includes(qp.get('stick')) ? qp.get('stick') : 'both',
+    trailMs: clamp(parseInt(qp.get('trail'), 10) || 650, 150, 3000),
+    size: clamp(parseInt(qp.get('size'), 10) || 170, 80, 400),
+    color: '#' + (qp.get('color') || '5ec8ff').replace('#',''),
+    glow: qp.get('glow') !== '0',
+    labels: qp.get('labels') !== '0',
+    embed: qp.get('controls') === '0',
+    bgColor: '#' + (qp.get('bgcolor') || '000000').replace('#',''),
+    bgOpacity: clamp(parseFloat(qp.get('bgopacity')) || 0.25, 0, 1),
+    deadzone: 0.05
+  };
+
+  document.body.classList.toggle('embed', state.embed);
+
+  // ---------------------------------------------------------------------
+  // Canvas setup
+  // ---------------------------------------------------------------------
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function resize(){
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function hexToRgba(hex, a){
+    const h = hex.replace('#','');
+    const r = parseInt(h.substring(0,2),16) || 0;
+    const g = parseInt(h.substring(2,4),16) || 0;
+    const b = parseInt(h.substring(4,6),16) || 0;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // ---------------------------------------------------------------------
+  // Gamepad polling
+  // ---------------------------------------------------------------------
+  let activeGamepadIndex = null;
+
+  window.addEventListener('gamepadconnected', (e) => {
+    activeGamepadIndex = e.gamepad.index;
+    setStatus(true, e.gamepad.id);
+  });
+  window.addEventListener('gamepaddisconnected', (e) => {
+    if (e.gamepad.index === activeGamepadIndex){
+      activeGamepadIndex = null;
+      setStatus(false);
+    }
+  });
+
+  function setStatus(connected, name){
+    const pill = document.getElementById('status');
+    const txt = document.getElementById('status-text');
+    if (!pill) return;
+    pill.classList.toggle('connected', connected);
+    txt.textContent = connected ? (name ? shorten(name) : 'Connected') : 'No controller';
+  }
+  function shorten(s){ return s.length > 26 ? s.slice(0,24) + '…' : s; }
+
+  function currentGamepad(){
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    if (activeGamepadIndex !== null && pads[activeGamepadIndex]) return pads[activeGamepadIndex];
+    for (const p of pads){ if (p) { activeGamepadIndex = p.index; setStatus(true, p.id); return p; } }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------
+  // Trails
+  // ---------------------------------------------------------------------
+  const trailL = [];
+  const trailR = [];
+
+  function pushPoint(arr, x, y, t){
+    arr.push({x, y, t});
+    while (arr.length && (t - arr[0].t) > state.trailMs) arr.shift();
+  }
+
+  function layout(){
+    const w = innerWidth, h = innerHeight;
+    const panelW = state.embed ? 0 : 340 + 18 + 18; // panel + margins
+    const r = state.size / 2;
+    const gap = 56;
+    const usableW = w - panelW;
+    const cy = h / 2;
+
+    if (state.mode === 'both'){
+      const groupW = r * 4 + gap;
+      const startX = (usableW - groupW) / 2 + r;
+      return {
+        L: { cx: startX, cy, r },
+        R: { cx: startX + r * 2 + gap, cy, r }
+      };
+    } else {
+      const cx = usableW / 2;
+      return {
+        L: { cx, cy, r },
+        R: { cx, cy, r }
+      };
+    }
+  }
+
+  function drawStick(cx, cy, r, ax, ay, trailArr, label, t){
+    // background fill
+    if (state.bgOpacity > 0){
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(state.bgColor, state.bgOpacity);
+      ctx.fill();
+    }
+
+    // boundary
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // center mark
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fill();
+
+    let dx = ax, dy = ay;
+    if (Math.hypot(dx, dy) < state.deadzone) { dx = 0; dy = 0; }
+    const px = cx + dx * r;
+    const py = cy + dy * r;
+    pushPoint(trailArr, px, py, t);
+
+    for (let i = 1; i < trailArr.length; i++){
+      const p0 = trailArr[i-1], p1 = trailArr[i];
+      const age = t - p1.t;
+      const alpha = Math.max(0, 1 - age / state.trailMs);
+      if (alpha <= 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineWidth = 1 + alpha * 2.6;
+      ctx.strokeStyle = hexToRgba(state.color, alpha * 0.9);
+      ctx.lineCap = 'round';
+      if (state.glow){ ctx.shadowColor = state.color; ctx.shadowBlur = 10 * alpha; }
+      else { ctx.shadowBlur = 0; }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+
+    // head dot
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fillStyle = state.color;
+    if (state.glow){ ctx.shadowColor = state.color; ctx.shadowBlur = 12; }
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    if (state.labels){
+      ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, cx, cy + r + 22);
+    }
+  }
+
+  function frame(t){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const gp = currentGamepad();
+    const pos = layout();
+
+    if (state.mode !== 'r'){
+      const ax = gp ? (gp.axes[0] || 0) : 0;
+      const ay = gp ? (gp.axes[1] || 0) : 0;
+      drawStick(pos.L.cx, pos.L.cy, pos.L.r, ax, ay, trailL, 'L', t);
+    }
+    if (state.mode !== 'l'){
+      const ax = gp ? (gp.axes[2] || 0) : 0;
+      const ay = gp ? (gp.axes[3] || 0) : 0;
+      drawStick(pos.R.cx, pos.R.cy, pos.R.r, ax, ay, trailR, 'R', t);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------------------------------------------------------------------
+  // Settings panel wiring (no-op / not rendered when embed=true, but we
+  // still guard every lookup since the elements exist in the DOM either way)
+  // ---------------------------------------------------------------------
+  if (!state.embed){
+    const el = {
+      mode: document.getElementById('mode'),
+      trail: document.getElementById('trail'),
+      size: document.getElementById('size'),
+      color: document.getElementById('color'),
+      bgcolor: document.getElementById('bgcolor'),
+      bgopacity: document.getElementById('bgopacity'),
+      glow: document.getElementById('glow'),
+      labels: document.getElementById('labels'),
+      darkbg: document.getElementById('darkbg'),
+      valMode: document.getElementById('val-mode'),
+      valTrail: document.getElementById('val-trail'),
+      valSize: document.getElementById('val-size'),
+      valBgOpacity: document.getElementById('val-bgopacity'),
+      obsurl: document.getElementById('obsurl'),
+      copybtn: document.getElementById('copybtn'),
+      copiedMsg: document.getElementById('copied-msg'),
+    };
+
+    el.mode.value = state.mode;
+    el.trail.value = state.trailMs;
+    el.size.value = state.size;
+    el.color.value = state.color;
+    el.bgcolor.value = state.bgColor;
+    el.bgopacity.value = Math.round(state.bgOpacity * 100);
+    el.glow.checked = state.glow;
+    el.labels.checked = state.labels;
+    el.darkbg.checked = false;
+
+    function refreshLabels(){
+      el.valMode.textContent = ({both:'Both', l:'Left', r:'Right'})[state.mode];
+      el.valTrail.textContent = state.trailMs + ' ms';
+      el.valSize.textContent = state.size + ' px';
+      el.valBgOpacity.textContent = Math.round(state.bgOpacity * 100) + '%';
+    }
+
+    function buildURL(){
+      const p = new URLSearchParams();
+      if (state.mode !== 'both') p.set('stick', state.mode);
+      p.set('trail', state.trailMs);
+      p.set('size', state.size);
+      p.set('color', state.color.replace('#',''));
+      p.set('bgcolor', state.bgColor.replace('#',''));
+      p.set('bgopacity', state.bgOpacity);
+      if (!state.glow) p.set('glow', '0');
+      if (!state.labels) p.set('labels', '0');
+      p.set('controls', '0');
+      const base = location.href.split('?')[0].split('#')[0];
+      return base + '?' + p.toString();
+    }
+
+    function refreshURL(){
+      el.obsurl.value = buildURL();
+    }
+
+    function update(){
+      refreshLabels();
+      refreshURL();
+    }
+    update();
+
+    el.mode.addEventListener('change', () => { state.mode = el.mode.value; update(); });
+    el.trail.addEventListener('input', () => { state.trailMs = parseInt(el.trail.value,10); update(); });
+    el.size.addEventListener('input', () => { state.size = parseInt(el.size.value,10); update(); });
+    el.color.addEventListener('input', () => { state.color = el.color.value; update(); });
+    el.bgcolor.addEventListener('input', () => { state.bgColor = el.bgcolor.value; update(); });
+    el.bgopacity.addEventListener('input', () => { state.bgOpacity = parseInt(el.bgopacity.value,10)/100; update(); });
+    el.glow.addEventListener('change', () => { state.glow = el.glow.checked; update(); });
+    el.labels.addEventListener('change', () => { state.labels = el.labels.checked; update(); });
+    el.darkbg.addEventListener('change', () => {
+      document.body.classList.toggle('preview-checker', !el.darkbg.checked);
+      document.body.classList.toggle('preview-dark', el.darkbg.checked);
+    });
+    document.body.classList.add('preview-checker');
+
+    el.copybtn.addEventListener('click', async () => {
+      const val = el.obsurl.value;
+      try{
+        await navigator.clipboard.writeText(val);
+      }catch(e){
+        el.obsurl.select();
+        document.execCommand('copy');
+      }
+      el.copiedMsg.classList.add('show');
+      setTimeout(() => el.copiedMsg.classList.remove('show'), 1400);
+    });
+
+    setStatus(false);
+  }
+})();
+</script>
+</body>
+</html>

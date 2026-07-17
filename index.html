@@ -297,6 +297,14 @@
   </div>
 
   <div class="field">
+    <label>Stick shape<span class="val" id="val-shape"></span></label>
+    <select id="shape">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+    </select>
+  </div>
+
+  <div class="field">
     <label>Trail length<span class="val" id="val-trail"></span></label>
     <input type="range" id="trail" min="150" max="2500" step="50">
   </div>
@@ -361,6 +369,7 @@
 
   const state = {
     mode: ['both','l','r'].includes(qp.get('stick')) ? qp.get('stick') : 'both',
+    shape: qp.get('shape') === 'square' ? 'square' : 'circle',
     trailMs: clamp(parseInt(qp.get('trail'), 10) || 650, 150, 3000),
     size: clamp(parseInt(qp.get('size'), 10) || 170, 80, 400),
     color: '#' + (qp.get('color') || '5ec8ff').replace('#',''),
@@ -468,17 +477,35 @@
   function drawStick(cx, cy, r, ax, ay, trailArr, label, t){
     // background fill
     if (state.bgOpacity > 0){
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = hexToRgba(state.bgColor, state.bgOpacity);
-      ctx.fill();
+      if (state.shape === 'square') {
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     // boundary
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = 1.5;
+    if (state.shape === 'square') {
+      ctx.strokeRect(cx - r, cy - r, r * 2, r * 2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // crosshairs ("ก้าง +")
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy);
+    ctx.lineTo(cx + r, cy);
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx, cy + r);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
     ctx.stroke();
 
     // center mark
@@ -552,6 +579,7 @@
   if (!state.embed){
     const el = {
       mode: document.getElementById('mode'),
+      shape: document.getElementById('shape'),
       trail: document.getElementById('trail'),
       size: document.getElementById('size'),
       color: document.getElementById('color'),
@@ -561,6 +589,7 @@
       labels: document.getElementById('labels'),
       darkbg: document.getElementById('darkbg'),
       valMode: document.getElementById('val-mode'),
+      valShape: document.getElementById('val-shape'),
       valTrail: document.getElementById('val-trail'),
       valSize: document.getElementById('val-size'),
       valBgOpacity: document.getElementById('val-bgopacity'),
@@ -570,6 +599,7 @@
     };
 
     el.mode.value = state.mode;
+    el.shape.value = state.shape;
     el.trail.value = state.trailMs;
     el.size.value = state.size;
     el.color.value = state.color;
@@ -581,6 +611,7 @@
 
     function refreshLabels(){
       el.valMode.textContent = ({both:'Both', l:'Left', r:'Right'})[state.mode];
+      el.valShape.textContent = state.shape === 'square' ? 'Square' : 'Circle';
       el.valTrail.textContent = state.trailMs + ' ms';
       el.valSize.textContent = state.size + ' px';
       el.valBgOpacity.textContent = Math.round(state.bgOpacity * 100) + '%';
@@ -589,6 +620,7 @@
     function buildURL(){
       const p = new URLSearchParams();
       if (state.mode !== 'both') p.set('stick', state.mode);
+      if (state.shape !== 'circle') p.set('shape', state.shape);
       p.set('trail', state.trailMs);
       p.set('size', state.size);
       p.set('color', state.color.replace('#',''));
@@ -612,6 +644,7 @@
     update();
 
     el.mode.addEventListener('change', () => { state.mode = el.mode.value; update(); });
+    el.shape.addEventListener('change', () => { state.shape = el.shape.value; update(); });
     el.trail.addEventListener('input', () => { state.trailMs = parseInt(el.trail.value,10); update(); });
     el.size.addEventListener('input', () => { state.size = parseInt(el.size.value,10); update(); });
     el.color.addEventListener('input', () => { state.color = el.color.value; update(); });

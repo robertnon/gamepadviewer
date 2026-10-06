@@ -691,6 +691,111 @@
     .selection-card:hover .card-action {
       transform: translateX(4px);
     }
+
+    /* ---------- ค่า Analog แบบละเอียด (หน้า Diagnostic) ---------- */
+    .analog-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 0.8fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    .analog-card {
+      background: #151b26;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .analog-card .metric-label {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .analog-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 6px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .analog-row:first-of-type {
+      border-top: none;
+    }
+
+    .analog-row .k {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .analog-row .v {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .analog-row .v .unit {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-weight: 450;
+      margin-left: 3px;
+    }
+
+    .trig-wrap {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      align-items: flex-end;
+      height: 150px;
+      margin-top: 4px;
+    }
+
+    .trig {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      height: 100%;
+    }
+
+    .trig-bar {
+      position: relative;
+      width: 22px;
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .trig-fill {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 0%;
+      background: var(--accent-default);
+      box-shadow: 0 0 10px var(--accent-default);
+    }
+
+    .trig .v {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .trig .k {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 700;
+    }
   </style>
 </head>
 
@@ -818,6 +923,16 @@
               class="knob"></span></span></label>
       </div>
       <div class="row-check">
+        <span>Show analog values (X/Y, %, °)</span>
+        <label class="switch"><input type="checkbox" id="readout"><span class="track"><span
+              class="knob"></span></span></label>
+      </div>
+      <div class="row-check">
+        <span>Show L2 / R2 triggers</span>
+        <label class="switch"><input type="checkbox" id="triggers"><span class="track"><span
+              class="knob"></span></span></label>
+      </div>
+      <div class="row-check">
         <span>Dark preview background</span>
         <label class="switch"><input type="checkbox" id="darkbg"><span class="track"><span
               class="knob"></span></span></label>
@@ -850,6 +965,40 @@
         style="width: 100%; padding: 12px 24px; font-size: 14px; font-weight: 750; border-radius: 8px; border: none; cursor: pointer; background: #57e79b; color: #000; box-shadow: 0 0 15px rgba(87, 231, 155, 0.4); font-family: var(--sans); text-transform: uppercase;">⚡
         Connect WebHID (All Controllers / SuiOvoI)</button>
     </div>
+
+    <!-- ค่า Analog สด: X/Y ทศนิยม 4 ตำแหน่ง, ระยะ %, องศา, ทริกเกอร์ L2/R2 -->
+    <div class="analog-grid">
+      <div class="analog-card">
+        <div class="metric-label"><span>LEFT STICK</span><span>L</span></div>
+        <div class="analog-row"><span class="k">X</span><span class="v" id="ana-lx">+0.0000</span></div>
+        <div class="analog-row"><span class="k">Y</span><span class="v" id="ana-ly">+0.0000</span></div>
+        <div class="analog-row"><span class="k">ระยะ (Distance)</span><span class="v" id="ana-ld">0.0<span class="unit">%</span></span></div>
+        <div class="analog-row"><span class="k">องศา (Angle)</span><span class="v" id="ana-la">---<span class="unit">°</span></span></div>
+      </div>
+      <div class="analog-card">
+        <div class="metric-label"><span>RIGHT STICK</span><span>R</span></div>
+        <div class="analog-row"><span class="k">X</span><span class="v" id="ana-rx">+0.0000</span></div>
+        <div class="analog-row"><span class="k">Y</span><span class="v" id="ana-ry">+0.0000</span></div>
+        <div class="analog-row"><span class="k">ระยะ (Distance)</span><span class="v" id="ana-rd">0.0<span class="unit">%</span></span></div>
+        <div class="analog-row"><span class="k">องศา (Angle)</span><span class="v" id="ana-ra">---<span class="unit">°</span></span></div>
+      </div>
+      <div class="analog-card">
+        <div class="metric-label"><span>TRIGGERS</span><span>L2 / R2</span></div>
+        <div class="trig-wrap">
+          <div class="trig">
+            <div class="trig-bar"><div class="trig-fill" id="ana-l2-fill"></div></div>
+            <span class="v" id="ana-l2">0.0000</span>
+            <span class="k">L2</span>
+          </div>
+          <div class="trig">
+            <div class="trig-bar"><div class="trig-fill" id="ana-r2-fill"></div></div>
+            <span class="v" id="ana-r2">0.0000</span>
+            <span class="k">R2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="metrics-grid">
       <div class="metric-card" style="grid-column: span 2;">
         <div class="metric-label">POLLING RATE (CURRENT SAMPLING WINDOW)</div>
@@ -914,6 +1063,8 @@
         embed: qp.get('controls') === '0',
         bgColor: '#' + (qp.get('bgcolor') || '000000').replace('#', ''),
         bgOpacity: clamp(parseFloat(qp.get('bgopacity')) || 0.25, 0, 1),
+        readout: qp.get('readout') !== '0',   // แสดงตัวเลข X/Y, %, องศา ใต้วงกลม
+        triggers: qp.get('triggers') !== '0', // แสดงแถบ L2/R2 ข้างวงกลม
         deadzone: 0.05
       };
 
@@ -979,6 +1130,35 @@
         return null;
       }
 
+      // อ่านค่าทั้งหมดจากจอยเป็นรูปแบบเดียวกัน ไม่ว่าจะมาจาก Gamepad API หรือ WebHID
+      // lx/ly/rx/ry: -1..1 (Y ลง = บวก ตามมาตรฐาน Gamepad API), l2/r2: 0..1
+      function readInputs(gp) {
+        if (!gp) return { lx: 0, ly: 0, rx: 0, ry: 0, l2: 0, r2: 0 };
+        const a = gp.axes || [];
+        let l2 = 0, r2 = 0;
+        if (gp.triggers) {
+          // WebHID
+          l2 = gp.triggers[0];
+          r2 = gp.triggers[1];
+        } else if (gp.buttons) {
+          // Gamepad API (standard mapping: ปุ่ม 6 = L2, ปุ่ม 7 = R2)
+          l2 = gp.buttons[6] ? gp.buttons[6].value : 0;
+          r2 = gp.buttons[7] ? gp.buttons[7].value : 0;
+        }
+        return { lx: a[0] || 0, ly: a[1] || 0, rx: a[2] || 0, ry: a[3] || 0, l2, r2 };
+      }
+
+      // ระยะดัน (0..1+) และองศา (0° = ขึ้น, หมุนตามเข็มนาฬิกา, 90° = ขวา)
+      function stickPolar(x, y) {
+        const dist = Math.hypot(x, y);
+        let deg = Math.atan2(x, -y) * 180 / Math.PI;
+        if (deg < 0) deg += 360;
+        return { dist, deg };
+      }
+
+      const fmtAxis = v => (v >= 0 ? '+' : '-') + Math.abs(v).toFixed(4);
+      const fmtDeg = (p) => p.dist < 0.02 ? '---' : p.deg.toFixed(1);
+
       // ---------------------------------------------------------------------
       // Trails
       // ---------------------------------------------------------------------
@@ -996,7 +1176,8 @@
         const r = state.size / 2;
         const gap = 56;
         const usableW = w - panelW;
-        const cy = h / 2;
+        // ขยับวงกลมขึ้นเล็กน้อยเพื่อเว้นที่ให้ตัวเลขด้านล่าง
+        const cy = h / 2 - (state.readout ? 22 : 0);
 
         if (state.mode === 'both') {
           const groupW = r * 4 + gap;
@@ -1012,6 +1193,29 @@
             R: { cx, cy, r }
           };
         }
+      }
+
+      // แถบทริกเกอร์แนวตั้ง (เติมจากล่างขึ้นบน)
+      function drawTrigger(x, cy, r, val, name) {
+        const bw = 10, bh = r * 2, top = cy - r;
+        ctx.fillStyle = hexToRgba(state.bgColor, Math.max(state.bgOpacity, 0.15));
+        ctx.fillRect(x, top, bw, bh);
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, top + 0.5, bw - 1, bh - 1);
+        const fh = bh * clamp(val, 0, 1);
+        if (fh > 0) {
+          ctx.fillStyle = state.color;
+          if (state.glow) { ctx.shadowColor = state.color; ctx.shadowBlur = 10; }
+          ctx.fillRect(x, top + bh - fh, bw, fh);
+          ctx.shadowBlur = 0;
+        }
+        ctx.font = '600 11px Consolas, "SFMono-Regular", Menlo, monospace';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, x + bw / 2, top - 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillText(Math.round(clamp(val, 0, 1) * 100) + '%', x + bw / 2, top + bh + 16);
       }
 
       function drawStick(cx, cy, r, ax, ay, trailArr, label, t) {
@@ -1085,35 +1289,77 @@
         ctx.fill();
         ctx.shadowBlur = 0;
 
+        let ty = cy + r + 22;
         if (state.labels) {
           ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
           ctx.fillStyle = 'rgba(255,255,255,0.55)';
           ctx.textAlign = 'center';
-          ctx.fillText(label, cx, cy + r + 22);
+          ctx.fillText(label, cx, ty);
+          ty += 20;
+        }
+
+        // ตัวเลขค่า analog แบบละเอียด (ใช้ค่าดิบ ไม่ผ่าน deadzone)
+        if (state.readout) {
+          const p = stickPolar(ax, ay);
+          ctx.font = '600 12px Consolas, "SFMono-Regular", Menlo, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillText(`X ${fmtAxis(ax)}   Y ${fmtAxis(ay)}`, cx, ty);
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.fillText(`${(p.dist * 100).toFixed(1)}%   ${fmtDeg(p)}°`, cx, ty + 17);
         }
       }
 
       function frame(t) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const gp = currentGamepad();
+        const inp = readInputs(gp);
         const pos = layout();
 
         if (state.mode !== 'r') {
-          const ax = gp ? (gp.axes[0] || 0) : 0;
-          const ay = gp ? (gp.axes[1] || 0) : 0;
-          drawStick(pos.L.cx, pos.L.cy, pos.L.r, ax, ay, trailL, 'L', t);
+          drawStick(pos.L.cx, pos.L.cy, pos.L.r, inp.lx, inp.ly, trailL, 'L', t);
+          if (state.triggers) drawTrigger(pos.L.cx - pos.L.r - 26, pos.L.cy, pos.L.r, inp.l2, 'L2');
         }
         if (state.mode !== 'l') {
-          const ax = gp ? (gp.axes[2] || 0) : 0;
-          const ay = gp ? (gp.axes[3] || 0) : 0;
-          drawStick(pos.R.cx, pos.R.cy, pos.R.r, ax, ay, trailR, 'R', t);
+          drawStick(pos.R.cx, pos.R.cy, pos.R.r, inp.rx, inp.ry, trailR, 'R', t);
+          if (state.triggers) drawTrigger(pos.R.cx + pos.R.r + 16, pos.R.cy, pos.R.r, inp.r2, 'R2');
         }
+
+        // อัปเดตการ์ดค่า analog ในหน้า Diagnostic
+        updateAnalogPanel(inp);
 
         // Render Polling Rate Scatter Chart
         drawChart();
 
         requestAnimationFrame(frame);
       }
+
+      // ---------- การ์ดค่า Analog (หน้า Diagnostic) ----------
+      const anaEl = {};
+      ['lx', 'ly', 'ld', 'la', 'rx', 'ry', 'rd', 'ra', 'l2', 'r2', 'l2-fill', 'r2-fill'].forEach(k => {
+        anaEl[k] = document.getElementById('ana-' + k);
+      });
+      const tabInfoEl = document.getElementById('tab-info');
+
+      function updateAnalogPanel(inp) {
+        // ไม่ต้องอัปเดตถ้าไม่ได้เปิดหน้า Diagnostic อยู่
+        if (!tabInfoEl || !tabInfoEl.classList.contains('active')) return;
+        const pl = stickPolar(inp.lx, inp.ly);
+        const pr = stickPolar(inp.rx, inp.ry);
+        anaEl.lx.textContent = fmtAxis(inp.lx);
+        anaEl.ly.textContent = fmtAxis(inp.ly);
+        anaEl.ld.innerHTML = `${(pl.dist * 100).toFixed(1)}<span class="unit">%</span>`;
+        anaEl.la.innerHTML = `${fmtDeg(pl)}<span class="unit">°</span>`;
+        anaEl.rx.textContent = fmtAxis(inp.rx);
+        anaEl.ry.textContent = fmtAxis(inp.ry);
+        anaEl.rd.innerHTML = `${(pr.dist * 100).toFixed(1)}<span class="unit">%</span>`;
+        anaEl.ra.innerHTML = `${fmtDeg(pr)}<span class="unit">°</span>`;
+        anaEl.l2.textContent = inp.l2.toFixed(4);
+        anaEl.r2.textContent = inp.r2.toFixed(4);
+        anaEl['l2-fill'].style.height = (clamp(inp.l2, 0, 1) * 100) + '%';
+        anaEl['r2-fill'].style.height = (clamp(inp.r2, 0, 1) * 100) + '%';
+      }
+
       requestAnimationFrame(frame);
 
       // ---------------------------------------------------------------------
@@ -1515,9 +1761,13 @@
 
                 webHidState = {
                   axes: [0, 0, 0, 0],
+                  triggers: [0, 0],
                   timestamp: 0,
                   id: `WebHID: ${device.productName}`
                 };
+                // DualSense (PS5) / DualSense Edge ใช้ layout ต่างจาก PS4
+                const isDualSense = device.vendorId === 0x054C &&
+                  (device.productId === 0x0CE6 || device.productId === 0x0DF2);
                 setStatus(true, webHidState.id);
                 btnWebHID.textContent = "✅ Connected via WebHID";
                 btnWebHID.style.background = "rgba(255,255,255,0.08)";
@@ -1527,18 +1777,35 @@
                 device.addEventListener("inputreport", event => {
                   const { data } = event;
 
-                  // Default to PS4 format (Byte 1=LX, 2=LY, 3=RX, 4=RY)
-                  // SuiOvoI custom boards usually spoof PS4 format
+                  // หมายเหตุ: ใน WebHID ตัว event.data "ไม่มี" byte report ID นำหน้า
+                  // ดังนั้น index 0 = byte แรกหลัง report ID
+                  //
+                  // PS4 (DS4) USB 0x01 / BT แบบย่อ 0x01 : 0=LX 1=LY 2=RX 3=RY ... 7=L2 8=R2
+                  // PS4 (DS4) Bluetooth 0x11              : มี 2 byte นำหน้า (offset 2)
+                  // PS5 (DualSense) USB 0x01              : 0=LX 1=LY 2=RX 3=RY 4=L2 5=R2
+                  // PS5 (DualSense) Bluetooth 0x31        : มี 1 byte นำหน้า (offset 1)
+                  // บอร์ด custom (เช่น SuiOvoI) ส่วนใหญ่ spoof เป็น PS4 จึงใช้ layout PS4 เป็นค่าเริ่มต้น
                   let offset = 0;
-                  if (event.reportId === 0x11) offset = 2; // Bluetooth offset
+                  let trigIdx = 7; // ตำแหน่ง L2 (R2 = ถัดไป)
+                  if (event.reportId === 0x11) {
+                    offset = 2;
+                  } else if (event.reportId === 0x31) {
+                    offset = 1; trigIdx = 4;
+                  } else if (isDualSense && data.byteLength >= 60) {
+                    trigIdx = 4; // DualSense USB report ยาว
+                  }
 
-                  // Read raw axes (0-255)
-                  const lx = data.getUint8(1 + offset);
-                  const ly = data.getUint8(2 + offset);
-                  const rx = data.getUint8(3 + offset);
-                  const ry = data.getUint8(4 + offset);
+                  if (data.byteLength < offset + trigIdx + 2) return; // report สั้นเกิน อ่านไม่ได้
 
-                  // Convert 0-255 to -1.0 to 1.0 range
+                  // อ่านค่าดิบ (0-255)
+                  const lx = data.getUint8(offset + 0);
+                  const ly = data.getUint8(offset + 1);
+                  const rx = data.getUint8(offset + 2);
+                  const ry = data.getUint8(offset + 3);
+                  const l2 = data.getUint8(offset + trigIdx);
+                  const r2 = data.getUint8(offset + trigIdx + 1);
+
+                  // แปลง 0-255 เป็น -1.0 ถึง 1.0 (ทริกเกอร์เป็น 0.0 ถึง 1.0)
                   const axL = (lx / 127.5) - 1.0;
                   const ayL = (ly / 127.5) - 1.0;
                   const axR = (rx / 127.5) - 1.0;
@@ -1548,6 +1815,8 @@
                   webHidState.axes[1] = ayL;
                   webHidState.axes[2] = axR;
                   webHidState.axes[3] = ayR;
+                  webHidState.triggers[0] = l2 / 255;
+                  webHidState.triggers[1] = r2 / 255;
 
                   const now = performance.now();
                   if (webHidState.timestamp !== 0) {
@@ -1604,6 +1873,8 @@
           bgopacity: document.getElementById('bgopacity'),
           glow: document.getElementById('glow'),
           labels: document.getElementById('labels'),
+          readout: document.getElementById('readout'),
+          triggers: document.getElementById('triggers'),
           darkbg: document.getElementById('darkbg'),
           valMode: document.getElementById('val-mode'),
           valShape: document.getElementById('val-shape'),
@@ -1624,6 +1895,8 @@
         el.bgopacity.value = Math.round(state.bgOpacity * 100);
         el.glow.checked = state.glow;
         el.labels.checked = state.labels;
+        el.readout.checked = state.readout;
+        el.triggers.checked = state.triggers;
         el.darkbg.checked = false;
 
         function refreshLabels() {
@@ -1645,6 +1918,8 @@
           p.set('bgopacity', state.bgOpacity);
           if (!state.glow) p.set('glow', '0');
           if (!state.labels) p.set('labels', '0');
+          if (!state.readout) p.set('readout', '0');
+          if (!state.triggers) p.set('triggers', '0');
           p.set('controls', '0');
           const base = location.href.split('?')[0].split('#')[0];
           return base + '?' + p.toString();
@@ -1669,6 +1944,8 @@
         el.bgopacity.addEventListener('input', () => { state.bgOpacity = parseInt(el.bgopacity.value, 10) / 100; update(); });
         el.glow.addEventListener('change', () => { state.glow = el.glow.checked; update(); });
         el.labels.addEventListener('change', () => { state.labels = el.labels.checked; update(); });
+        el.readout.addEventListener('change', () => { state.readout = el.readout.checked; update(); });
+        el.triggers.addEventListener('change', () => { state.triggers = el.triggers.checked; update(); });
         el.darkbg.addEventListener('change', () => {
           document.body.classList.toggle('preview-checker', !el.darkbg.checked);
           document.body.classList.toggle('preview-dark', el.darkbg.checked);
